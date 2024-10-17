@@ -2,40 +2,44 @@
 
 Model_recovery = function(parameters){
   
-  source(here::here("Model recovery","scripts", "Fit model recovery.R"))
+  source(here::here("scripts", "Fitmodelrecovery_matlab.R"))
+  
 
-  model = paste0("model = ",
-                   as.character(parameters$model[1]))
-  
-  trials_n_subs = paste0("trials = ",
-                         as.character(parameters$trials[1]),
-                         " subjects = ",
-                         as.character(parameters$subjects[1]))
-  
-  
   # Get a list of all files in the directory
-  files <- sort(list.files(path = here::here("Model recovery","Data",as.character(parameters$model[1]),trials_n_subs), full.names = TRUE))
+  if(parameters$data == "gaussian"){
+    data = read_csv("matlabdata/R_gaussian_50_80_all_data.csv") %>% filter(idx == parameters$id)
+  }
+  if(parameters$data == "gumbel"){
+    data = read_csv("matlabdata/R_gumbel_50_80_all_data.csv")%>% filter(idx == parameters$id)
+  }
+  if(parameters$data == "hyper"){
+    data = read_csv("matlabdata/R_hyper_50_80_all_data.csv")%>% filter(idx == parameters$id)
+  }
+  if(parameters$data == "logit"){
+    data = read_csv("matlabdata/R_logit_50_80_all_data.csv")%>% filter(idx == parameters$id)
+  }
   
-  data = read.csv(files[parameters$id])
   
   #rstanmod = rstan::stan_model(here::here("Model recovery","Stanmodels","mixed parameterization","Normal.stan"))
   
-  mod_norm_mixed = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","mixed","Mixed_Normal.stan"),   force_recompile = TRUE)
-  mod_Hyperbolic_mixed = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","mixed","Mixed_Hyperbolic.stan"))
-  mod_Gumbel_mixed = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","mixed","Mixed_Gumbel.stan"))
-  mod_Logistic_mixed = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","mixed","Mixed_Logistic.stan"))
+  mod_norm_mixed = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","mixed","Mixed_Normal.stan"))
+  mod_Hyperbolic_mixed = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","mixed","Mixed_Hyperbolic.stan"))
+  mod_Gumbel_mixed = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","mixed","Mixed_Gumbel.stan"))
+  mod_Logistic_mixed = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","mixed","Mixed_Logistic.stan"))
   
-  #rstanmod = rstan::stan_model(here::here("Model recovery","Stanmodels","Loo_trial","Normal.stan"))
-  #rstanmod = rstan::stan_model(here::here("Model recovery","Stanmodels","Loo_trial","mixed","Mixed_Normal.stan"))
+  #rstanmod = rstan::stan_model(here::here("Stanmodels","Loo_trial","Normal.stan"))
+  #rstanmod = rstan::stan_model(here::here("Stanmodels","Loo_trial","mixed","Mixed_Normal.stan"))
   
   
-  mod_norm = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","Normal.stan"))
-  mod_Hyperbolic = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","Hyperbolic.stan"))
-  mod_Gumbel = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","Gumbel.stan"))
-  mod_Logistic = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_trial","Logistic.stan"))
+  mod_norm = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","Normal.stan"))
+  mod_Hyperbolic = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","Hyperbolic.stan"))
+  mod_Gumbel = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","Gumbel.stan"))
+  mod_Logistic = cmdstanr::cmdstan_model(here::here("Stanmodels","Loo_trial","Logistic.stan"))
   
   #mod_norm = cmdstanr::cmdstan_model(here::here("Model recovery","Stanmodels","Loo_subject","Normal_loo_subject.stan"),stanc_options = list("O1"))
   
+  
+  # Fitting normal data
   
   normal_fit1 = fit_model(data,mod_norm, model = "normal")
   
@@ -49,9 +53,9 @@ Model_recovery = function(parameters){
   }else{
     normal_fit = normal_fit1
   }
-
+  
   hyper_fit1 = fit_model(data,mod_Hyperbolic, model = "hyperbolic")
-
+  
   if(hyper_fit1[[2]]$mean_div != 0){
     hyper_fit2 = fit_model(data,mod_Hyperbolic_mixed, model = "hyperbolic")
     
@@ -64,7 +68,7 @@ Model_recovery = function(parameters){
     hyper_fit = hyper_fit1
   }
   
-    
+  
   gumbel_fit1 = fit_model(data,mod_Gumbel_mixed, model = "gumbel")
   
   
@@ -81,10 +85,9 @@ Model_recovery = function(parameters){
   
   logistic_fit1 = fit_model(data,mod_Logistic_mixed, model = "logistic")
   
-  
   if(logistic_fit1[[2]]$mean_div != 0){
     logistic_fit2 = fit_model(data,mod_Logistic, model = "logistic")
-
+    
     if(logistic_fit1[[2]]$mean_div < logistic_fit2[[2]]$mean_div){
       logistic_fit = logistic_fit1
     }else{
@@ -95,29 +98,39 @@ Model_recovery = function(parameters){
   }
   
   
-  
-  
-  
   loo = loo::loo_compare(list(normal = normal_fit[[1]],
-                   hyperbolic = hyper_fit[[1]],
-                   gumbel = gumbel_fit[[1]],
-                   logistic = logistic_fit[[1]]))
+                              hyperbolic = hyper_fit[[1]],
+                              gumbel = gumbel_fit[[1]],
+                              logistic = logistic_fit[[1]]))
   
   
   fit_diagnostics = rbind(normal_fit[[2]],
-                      hyper_fit[[2]],
-                      gumbel_fit[[2]],
-                      logistic_fit[[2]])
+                          hyper_fit[[2]],
+                          gumbel_fit[[2]],
+                          logistic_fit[[2]])
   
   
   result = inner_join(data.frame(loo) %>% rownames_to_column(var = "models") %>% 
                         dplyr::select(models, elpd_diff,se_diff) %>% mutate(elpd_ratio = elpd_diff/se_diff), fit_diagnostics) %>% 
-    mutate(replicate = parameters$replicate,
-           subjects = parameters$subjects,
-           trials = parameters$trials,
-           dataset = parameters$model)
+    mutate(idx = parameters$id,
+           dataset = parameters$data)
   
-  return(result)
+  group_param = rbind(normal_fit[[4]],
+                      hyper_fit[[4]],
+                      gumbel_fit[[4]],
+                      logistic_fit[[4]]) %>% 
+    mutate(idx = parameters$id,
+           dataset = parameters$data)
+  
+  
+  subj_param = rbind(normal_fit[[5]],
+                      hyper_fit[[5]],
+                      gumbel_fit[[5]],
+                      logistic_fit[[5]]) %>% 
+    mutate(idx = parameters$id,
+           dataset = parameters$data)
+  
+  return(list(result,group_param,subj_param))
   
 }
 
@@ -125,59 +138,56 @@ Model_recovery = function(parameters){
 
 fit_model = function(data,mod, model){
   
-  
-  # if(max(data$sessions) != 1){
-  # 
-  #   df = data%>% filter(sessions == 1) %>% group_by(participant_id,X) %>% summarize(yn = sum(resp), n = n())
-  # }else{
-  #   df = data %>% group_by(participant_id,X) %>% summarize(yn = sum(resp), n = n())
-  # }
-
-  datastan = list(Y = data$resp,
+  datastan = list(Y = data$response,
                   N = nrow(data),
-                  S = length(unique(data$participant_id)),
-                  S_id = data$participant_id,
-                  X = matrix(c(rep(1,nrow(data)), data$X), ncol = 2, nrow = nrow(data)))
+                  S = length(unique(data$participant)),
+                  S_id = data$participant,
+                  X = matrix(c(rep(1,nrow(data)), data$stimuli), ncol = 2, nrow = nrow(data)))
   
-    
+  
   # seems to be the case that the non-centered is just better.
   
-    #fitting
-    fit <- mod$sample(
-      data = datastan,
-      iter_sampling = 1500,
-      iter_warmup = 1500,
-      chains = 4,
-      parallel_chains = 4,
-      refresh = 500,
-      adapt_delta = 0.90,
-      max_treedepth = 10
-    )
-    
-      
-      diags_norm = data.frame(fit$diagnostic_summary()) %>% 
-        mutate(models = model) %>% group_by(models) %>% summarize(mean_div = mean(num_divergent),
-                                                                   mean_treedepth = mean(num_max_treedepth))
-      
-      rhat_norm = data.frame(fit$summary(c("gm[1]","gm[2]","gm[3]",
-                                                  "tau_u[1]","tau_u[2]","tau_u[3]"))) %>% 
-        mutate(models = model) %>% group_by(models) %>% summarize(meanrhat = mean(rhat))
-      
-
-    
-      options(mc.cores = 4)
-      
-      fit_loo = loo(fit$draws("log_lik"),moment_match=T)
-      
-      # fit_loomm = fit$loo(moment_match = T)
-      # 
-      # fit_loo = fit$loo()
-      
-      normal_loo_diag = sum(fit_loo$diagnostics$pareto_k > 0.7)
-      
-      diags = inner_join(diags_norm,rhat_norm) %>% mutate(pareto_k_over_0.7 = normal_loo_diag)
-            
-      return(list(fit_loo, diags,fit))
+  #fitting
+  fit <- mod$sample(
+    data = datastan,
+    iter_sampling = 1000,
+    iter_warmup = 1000,
+    chains = 4,
+    parallel_chains = 4,
+    refresh = 500,
+    adapt_delta = 0.90,
+    max_treedepth = 10
+  )
+  
+  
+  diags_norm = data.frame(fit$diagnostic_summary()) %>% 
+    mutate(models = model) %>% group_by(models) %>% summarize(mean_div = mean(num_divergent),
+                                                              mean_treedepth = mean(num_max_treedepth))
+  
+  
+  rhat_norm = data.frame(fit$summary(c("gm[1]","gm[2]","gm[3]",
+                                       "tau_u[1]","tau_u[2]","tau_u[3]"))) %>% 
+    mutate(models = model) %>% group_by(models) %>% summarize(meanrhat = mean(rhat))
+  
+  
+  
+  group_fits = data.frame(fit$summary(c("gm[1]","gm[2]","gm[3]",
+                                       "tau_u[1]","tau_u[2]","tau_u[3]"))) %>% 
+    mutate(models = model)
+  
+  indi_fits = data.frame(fit$summary(c("alpha","beta","lapse"))) %>% 
+    mutate(models = model)
+  
+  
+  options(mc.cores = 4)
+  
+  fit_loo = loo(fit$draws("log_lik"),moment_match=T)
+  
+  normal_loo_diag = sum(fit_loo$diagnostics$pareto_k > 0.7)
+  
+  diags = inner_join(diags_norm,rhat_norm) %>% mutate(pareto_k_over_0.7 = normal_loo_diag)
+  
+  return(list(fit_loo, diags,fit,group_fits,indi_fits))
 }
 
 
@@ -199,7 +209,7 @@ Model_recovery_rstan = function(parameters){
   
   data = read.csv(files[parameters$id])
   
-
+  
   mod_norm = rstan::stan_model(here::here("Model recovery","Stanmodels","Loo_trial","Normal.stan"))
   mod_norm_mixed = rstan::stan_model(here::here("Model recovery","Stanmodels","Loo_trial","mixed","Mixed_Normal.stan"))
   
@@ -302,7 +312,7 @@ Model_recovery_rstan = function(parameters){
 
 fit_model_rstan = function(data,mod, model){
   
-
+  
   
   datastan = list(Y = data$resp,
                   N = nrow(data),
@@ -327,7 +337,7 @@ fit_model_rstan = function(data,mod, model){
   treedepth <- sampler_params[[1]][,3]
   total_treedepth <- sum(treedepth == 10)
   
-
+  
   diags_norm = data.frame(models = model) %>% mutate(sum_div = total_divergent,
                                                      sum_tree = total_treedepth)
   
