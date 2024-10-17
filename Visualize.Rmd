@@ -1,0 +1,159 @@
+---
+title: "Visualize"
+output: html_document
+date: "2024-03-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(cmdstanr, tidyverse,posterior, bayesplot, tidybayes, furrr,bridgesampling, rstan, brms, faux,LRO.utilities,reticulate)
+
+```
+
+## R Markdown
+
+```{r}
+subs = 40
+
+mu_alpha = rnorm(1,0,5)
+sd_alpha = rnorm(1,5,2)
+mu_beta = rnorm(1,-2, 1)
+sd_beta = rnorm(1, 1, 0.5)
+mu_lambda = rnorm(1,-4,0.5)
+sd_lambda = rnorm(1,2,0.5)
+
+alphas = rnorm(subs, mu_alpha, sd_alpha)
+betas = exp(rnorm(subs, mu_beta, sd_beta))
+lambdas = brms::inv_logit_scaled(rnorm(subs, mu_lambda, sd_lambda)) / 2
+
+params = data.frame(alpha = alphas,
+                    beta = betas,
+                    lambda = lambdas,
+                    id = 1:subs)
+
+x = seq(-40,40,1)
+
+normal = function(x,alpha,beta,lambda){
+  return(lambda + (1 - 2 * lambda) * (0.5+0.5*pracma::erf(sqrt(beta/2)*(x-alpha))))
+}
+
+logsitic = function(x,alpha,beta,lambda){
+  
+  return(lambda + (1 - 2 * lambda) * (1/(1+exp(-beta*(x-alpha)))))
+}
+
+gumbel = function(x,alpha,beta,lambda){
+  return(lambda + (1 - 2 * lambda) * (1-exp(-10^(beta*(x-alpha)))))
+}
+
+hyperbolic = function(x,alpha,beta,lambda){
+  return(lambda + (1 - 2 * lambda) * ((2/pi)*atan(exp((pi/2)*beta*(x-alpha)))))
+}
+
+
+params %>% rowwise() %>% mutate(xs = list(x),
+                                normal = list(normal(x,alpha,beta,lambda)),
+                                logsitic = list(logsitic(x,alpha,beta,lambda)),
+                                gumbel = list(gumbel(x,alpha,beta,lambda)),
+                                hyperbolic = list(hyperbolic(x,alpha,beta,lambda))) %>% 
+  unnest() %>% pivot_longer(cols = c("normal","logsitic","gumbel","hyperbolic"), names_to = "model") %>% 
+  ggplot(aes(x = xs, y = value, group = id))+geom_line()+facet_wrap(~model)
+
+
+```
+
+
+
+```{r}
+get_matrix = function(q, div){
+
+#  df = map_dfr(q[-which(q == "Error")], bind_rows)
+
+  df = map_dfr(q, bind_rows)
+  
+  df %>% ggplot()+
+    geom_pointrange(aes(x = replicate, y = elpd_diff, ymin = elpd_diff - 2*se_diff, ymax = elpd_diff + 2*se_diff))+
+    facet_wrap(~dataset) + 
+    scale_y_continuous(limits = c(-5,1))
+  
+  #df %>% mutate(sim_id = rep(1:(98*4),each = 4)) %>% group_by(sim_id) %>% summarize(mean(pareto_k_over_0.7))
+  
+  q = df %>% filter(elpd_diff == 0 & sum_div <= 0) %>% 
+    group_by(dataset, models) %>% summarize(n = n(), .groups = 'drop')
+
+  # Expand to include all combinations of 'dataset' and 'models'
+  all_combinations <- expand(df, dataset, models)
+
+# Left join with the summarized dataframe and replace NA with 0
+  q <- all_combinations %>%
+    left_join(q, by = c("dataset", "models")) %>%
+    replace_na(list(n = 0))
+  
+  m = matrix(q$n, nrow = 4, byrow = T)
+  
+  colnames(m) = c("model_gumbel","model_hyper","model_logistic","model_normal")
+  
+  rownames(m) = unique(q$dataset)
+
+  logs = m[4,]
+  hyper = m[3,]
+  gumbel = m[2,]
+  normal = m[1,]
+  
+  m[1,] = gumbel
+  m[2,] = hyper
+  m[3,] = logs
+  m[4,] = normal
+  
+  rownames(m) = c("data_gumbel","data_hyper","data_logsistic","data_normal")
+  
+  return(m)
+
+}
+
+get_matrix(readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 20 trials = 50 results.rds"), 0)
+get_matrix(readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 20 trials = 100 results.rds"), 0)
+get_matrix(readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 20 trials = 150 results.rds"), 0)
+```
+
+
+```{r}
+get_matrix(readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 50 trials = 50 results.rds"), 0)
+get_matrix(readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 50 trials = 100 results.rds"), 0)
+model_recovery_table = as.data.frame(get_matrix(readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 50 trials = 150 results.rds"), 0)) %>% rownames_to_column(" ")
+
+write.csv(model_recovery_table,here::here("plots","model_recovery.csv"))
+
+```
+
+
+
+```{r}
+
+q = readRDS("~/Hierarchical-Interoception/Model recovery/results/subjects = 20 trials = 50 results.rds")
+df = map_dfr(q[-which(q == "Error")], bind_rows)
+
+df %>% ggplot()+
+  geom_pointrange(aes(x = replicate, y = elpd_diff, ymin = elpd_diff - 2*se_diff, ymax = elpd_diff + 2*se_diff))+
+  facet_wrap(~dataset) + 
+  scale_y_continuous(limits = c(-5,1))
+
+
+q = df %>% filter(elpd_diff == 0 & mean_div < 5) %>% 
+  group_by(dataset, models) %>% summarize(n = n())
+
+m = matrix(q$n, nrow = 4, byrow = T)
+
+colnames(m) = unique(q$models)
+
+rownames(m) = unique(q$dataset)
+
+m
+```
+
+
+$$
+
+0.5+0.5*erf(\frac{\beta * (x-\alpha)}{\sqrt2})
+$$
+
