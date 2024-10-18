@@ -56,15 +56,16 @@ transformed parameters{
 model{
   
   //priors
-  target += normal_lpdf(gm[1] |  0 , 50);
-  target += normal_lpdf(gm[2] |  0.5 , 3);
-  target += normal_lpdf(gm[3] | -4 , 2);
+  target += normal_lpdf(gm[1] | 0,50);
+  target += normal_lpdf(gm[2] |  -0.7 , 1.3);
+  target += normal_lpdf(gm[3] | -4, 2);
+  
   
   // target += normal_lpdf(gm[4] | -3, 2);
   target += std_normal_lpdf(to_vector(z_expo));
-  target += normal_lpdf(tau_u[1] | 0, 20)-normal_lccdf(0 | 0, 20);
-  target += normal_lpdf(tau_u[2] | 0, 5)-normal_lccdf(0 | 0, 5);
-  target += normal_lpdf(tau_u[3] | 0, 5)-normal_lccdf(0 | 0, 5);
+  target += normal_lpdf(tau_u[1] | 0, 50)-normal_lccdf(0 | 0, 50);
+  target += normal_lpdf(tau_u[2] | 0, 1.3)-normal_lccdf(0 | 0, 1.3);
+  target += normal_lpdf(tau_u[3] | 0, 2)-normal_lccdf(0 | 0, 2);
 
   target += normal_lpdf(alpha | gm[1], tau_u[1]);
   target += normal_lpdf(beta | gm[2], tau_u[2]);

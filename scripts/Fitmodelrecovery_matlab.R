@@ -154,9 +154,9 @@ fit_model = function(data,mod, model){
     iter_warmup = 1000,
     chains = 4,
     parallel_chains = 4,
-    refresh = 500,
-    adapt_delta = 0.90,
-    max_treedepth = 10
+    refresh = 0,
+    adapt_delta = 0.95,
+    max_treedepth = 12
   )
   
   
@@ -309,46 +309,3 @@ Model_recovery_rstan = function(parameters){
   
 }
 
-
-fit_model_rstan = function(data,mod, model){
-  
-  
-  
-  datastan = list(Y = data$resp,
-                  N = nrow(data),
-                  S = length(unique(data$participant_id)),
-                  S_id = data$participant_id,
-                  X = matrix(c(rep(1,nrow(data)), data$X), ncol = 2, nrow = nrow(data)))
-  
-  
-  # seems to be the case that the non-centered is just better.
-  
-  fit = sampling(mod, data = datastan,
-                 iter = 2000,
-                 chains = 4,
-                 init = 0,
-                 cores = 4,
-                 refresh = 500)
-  
-  sampler_params <- get_sampler_params(fit, inc_warmup = FALSE)
-  num_divergent <- sapply(sampler_params, function(x) sum(x[, "divergent__"]))
-  total_divergent <- sum(num_divergent)
-  
-  treedepth <- sampler_params[[1]][,3]
-  total_treedepth <- sum(treedepth == 10)
-  
-  
-  diags_norm = data.frame(models = model) %>% mutate(sum_div = total_divergent,
-                                                     sum_tree = total_treedepth)
-  
-  
-  rhat_norm = data.frame(models = model,rhat = sum(summary(fit)$summary[1:6,10] > 1.03))
-  
-  fit_loo = loo(fit,moment_match=T, cores = 4)
-  
-  normal_loo_diag = pareto_over_0.7 = sum(fit_loo$diagnostics$pareto_k >0.7)
-  
-  diags = inner_join(diags_norm,rhat_norm) %>% mutate(pareto_k_over_0.7 = normal_loo_diag)
-  
-  return(list(fit_loo, diags,fit))
-}
